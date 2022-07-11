@@ -8,8 +8,7 @@ terraform {
 }
 
 provider "aws" {
-  region     = "eu-west-1"
-
+  region = "eu-west-1"
 }
 
 
@@ -33,9 +32,8 @@ resource "aws_internet_gateway" "gw" {
   }
 }
 
-resource "aws_route_table" "default_route" {
-  vpc_id = aws_vpc.dev_vpc.id
-
+resource "aws_default_route_table" "default_route" {
+  default_route_table_id = aws_vpc.dev_vpc.default_route_table_id
   route {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.gw.id
@@ -173,7 +171,7 @@ resource "aws_db_instance" "rds_database" {
   db_subnet_group_name = aws_db_subnet_group.default.name
   #
   skip_final_snapshot = true
-  
+
 }
 
 #EFS Setup
@@ -236,32 +234,19 @@ resource "aws_instance" "web_server" {
 
   user_data = <<EOF
   #!/bin/bash
-  wget
+  wget https://github.com/xrisii98/Interview-HC/blob/a531e1ea1edfb637ff171524c36b18f2788866b3/install.sh
+  sudo install.sh ${var.db_username} ${var.db_password} ${aws_db_instance.rds_database.endpoint} ${aws_efs_mount_target.mount_targets.dns_name}
 
 EOF 
- 
-  lifecycle {
-    ignore_changes = [
-      
-    ]
-  }
+}
+#Create AMI for further deployments
+resource "aws_ami_from_instance" "AMI" {
+  source_instance_id = aws_instance.web_server.id
+  name               = "web_server_ami"
+
 }
 
-
-#Autoscale Launch configuration Setup
-resource "aws_launch_configuration" "autoscale_launch_conf" {
-  name          = "web_config"
-  image_id      = aws_ami_from_instance.autoscale_ami.id
-  instance_type = "t2.micro"
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-
-
-#Load Balancer 
+#Load Balancer Configuration
 resource "aws_lb" "load_balancer" {
   name               = "loadbalancer"
   internal           = false
@@ -270,7 +255,6 @@ resource "aws_lb" "load_balancer" {
   subnets            = [aws_subnet.lb_subnet.id, aws_subnet.lb_subnet_1.id]
 
   enable_deletion_protection = false
-
 
 }
 
